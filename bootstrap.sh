@@ -42,34 +42,9 @@ print_info "Starting Pi Serial Bridge bootstrap..."
 print_info "Updating package lists..."
 apt-get update -qq
 
-# Install Python3 if not already installed
-if ! command -v python3 &> /dev/null; then
-    print_info "Installing Python3..."
-    apt-get install -y python3 python3-pip
-else
-    print_info "Python3 is already installed ($(python3 --version))"
-fi
-
-# Install pip if not already installed
-if ! command -v pip3 &> /dev/null; then
-    print_info "Installing pip3..."
-    apt-get install -y python3-pip
-else
-    print_info "pip3 is already installed"
-fi
-
-# Install pyserial
-print_info "Installing pyserial..."
-pip3 install --upgrade pyserial
-
-# Download the tcp_serial_redirect script
-print_info "Downloading tcp_serial_redirect.py script..."
-SCRIPT_URL="https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/tcp_serial_redirect.py"
-SCRIPT_PATH="/usr/local/bin/tcp_serial_redirect.py"
-
-curl -sSL "$SCRIPT_URL" -o "$SCRIPT_PATH"
-chmod +x "$SCRIPT_PATH"
-print_info "Script downloaded to $SCRIPT_PATH"
+# Install ser2net (standard serial-to-network tool)
+print_info "Installing ser2net..."
+apt-get install -y ser2net
 
 # Set hostname
 read -p "Enter hostname for this device [${DEFAULT_HOSTNAME}]: " HOSTNAME
@@ -101,37 +76,29 @@ TCP_PORT=${TCP_PORT:-$DEFAULT_TCP_PORT}
 read -p "Enter baud rate [${DEFAULT_BAUDRATE}]: " BAUDRATE
 BAUDRATE=${BAUDRATE:-$DEFAULT_BAUDRATE}
 
-# Create systemd service for the serial bridge
-print_info "Creating systemd service..."
+# Create ser2net configuration file
+print_info "Creating ser2net configuration..."
 
-cat > /etc/systemd/system/serial-tcp-bridge.service <<EOF
-[Unit]
-Description=Serial to TCP Bridge for Russound
-After=network.target
-
-[Service]
-Type=simple
-User=root
-ExecStart=/usr/bin/python3 /usr/local/bin/tcp_serial_redirect.py ${SERIAL_PORT} ${BAUDRATE} -p ${TCP_PORT}
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
+cat > /etc/ser2net.yaml <<EOF
+connection: &con01
+  accepter: tcp,${TCP_PORT}
+  connector: serialdev,${SERIAL_PORT},${BAUDRATE}n81,local
+  options:
+    kickolduser: true
 EOF
 
 # Reload systemd and enable the service
-print_info "Enabling and starting the serial-tcp-bridge service..."
+print_info "Enabling and starting ser2net service..."
 systemctl daemon-reload
-systemctl enable serial-tcp-bridge.service
-systemctl restart serial-tcp-bridge.service
+systemctl enable ser2net.service
+systemctl restart ser2net.service
 
 # Check service status
 sleep 2
-if systemctl is-active --quiet serial-tcp-bridge.service; then
+if systemctl is-active --quiet ser2net.service; then
     print_info "Serial TCP Bridge service is running successfully!"
 else
-    print_warning "Service may not be running. Check status with: systemctl status serial-tcp-bridge.service"
+    print_warning "Service may not be running. Check status with: systemctl status ser2net.service"
 fi
 
 # Display configuration summary
@@ -146,8 +113,8 @@ echo "Baud Rate:    $BAUDRATE"
 echo "======================================"
 echo ""
 print_info "Setup complete! The serial bridge is now available at: ${HOSTNAME}.local:${TCP_PORT}"
-print_info "You can check the service status with: systemctl status serial-tcp-bridge.service"
-print_info "View logs with: journalctl -u serial-tcp-bridge.service -f"
+print_info "You can check the service status with: systemctl status ser2net.service"
+print_info "View logs with: journalctl -u ser2net.service -f"
 echo ""
 print_info "For Home Assistant, use:"
 echo "  Host: ${HOSTNAME}.local"

@@ -4,7 +4,7 @@ A simple bootstrap file to quickly setup a serial-tcp bridge on an SBC (Single B
 
 ## Purpose
 
-This project provides an easy way to bridge a serial device (such as a Russound sound system) to TCP/IP for use with Home Assistant or other network-based automation systems.
+This project provides an easy way to bridge a serial device (such as a Russound sound system) to TCP/IP for use with Home Assistant or other network-based automation systems. It uses the standard `ser2net` tool for reliable serial-to-TCP bridging.
 
 ## Quick Start
 
@@ -15,9 +15,10 @@ curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/boots
 ```
 
 The script will:
-- Install Python3 and required dependencies (pyserial)
+- Install required system packages (ser2net)
 - Set up the hostname for easy network discovery
-- Configure and start a systemd service that bridges your serial device to TCP
+- Configure ser2net for serial-to-TCP bridging
+- Set up and start a systemd service
 - Provide configuration options for serial port, TCP port, and baud rate
 
 ## Configuration
@@ -38,17 +39,23 @@ After installation, configure your Home Assistant integration with:
 
 Check service status:
 ```bash
-sudo systemctl status serial-tcp-bridge.service
+sudo systemctl status ser2net.service
 ```
 
 View logs:
 ```bash
-sudo journalctl -u serial-tcp-bridge.service -f
+sudo journalctl -u ser2net.service -f
 ```
 
 Restart service:
 ```bash
-sudo systemctl restart serial-tcp-bridge.service
+sudo systemctl restart ser2net.service
+```
+
+Edit configuration:
+```bash
+sudo nano /etc/ser2net.yaml
+sudo systemctl restart ser2net.service
 ```
 
 ## Manual Installation
