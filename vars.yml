@@ -1,0 +1,22 @@
+---
+# Variables for pi-serial-bridge configuration
+# Override these values as needed
+
+# Hostname for the device (will be accessible as <hostname>.local)
+hostname: "russound-bridge"
+
+# Serial port device path
+serial_port: "/dev/ttyUSB0"
+
+# TCP port for the serial bridge
+tcp_port: 4999
+
+# Baud rate for serial communication (common for Russound: 19200)
+baudrate: 19200
+
+# Automatic update schedule (systemd timer format)
+# Default: Monday at 4:30am
+auto_update_schedule: "Mon *-*-* 04:30:00"
+
+# Time for automatic reboot if required (24-hour format)
+auto_update_reboot_time: "04:30"

@@ -1,0 +1,152 @@
+---
+- name: Configure Pi Serial Bridge
+  hosts: all
+  become: yes
+  vars:
+    hostname: "russound-bridge"
+    serial_port: "/dev/ttyUSB0"
+    tcp_port: 4999
+    baudrate: 19200
+    auto_update_schedule: "Mon *-*-* 04:30:00"
+    auto_update_reboot_time: "04:30"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install ser2net
+      apt:
+        name: ser2net
+        state: present
+
+    - name: Install unattended-upgrades
+      apt:
+        name: unattended-upgrades
+        state: present
+
+    - name: Configure unattended-upgrades for Debian/Ubuntu/Pi OS
+      copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        content: |
+          // Automatically upgrade packages from these origins
+          Unattended-Upgrade::Origins-Pattern {
+              // Debian
+              "origin=Debian,codename=${distro_codename},label=Debian-Security";
+              "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+              // Ubuntu
+              "origin=Ubuntu,archive=${distro_codename}-security,label=Ubuntu";
+              // Raspberry Pi OS
+              "origin=Raspbian,codename=${distro_codename},label=Raspbian";
+          };
+
+          // Remove unused automatically installed kernel-related packages
+          Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+
+          // Remove unused dependencies after automatic upgrade
+          Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+          // Automatically reboot if required
+          Unattended-Upgrade::Automatic-Reboot "true";
+          Unattended-Upgrade::Automatic-Reboot-Time "{{ auto_update_reboot_time }}";
+        mode: '0644'
+
+    - name: Configure automatic updates schedule
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+        mode: '0644'
+
+    - name: Create systemd timer override directory
+      file:
+        path: /etc/systemd/system/apt-daily-upgrade.timer.d
+        state: directory
+        mode: '0755'
+
+    - name: Configure systemd timer for Monday at 4:30am
+      copy:
+        dest: /etc/systemd/system/apt-daily-upgrade.timer.d/override.conf
+        content: |
+          [Timer]
+          OnCalendar=
+          OnCalendar={{ auto_update_schedule }}
+          RandomizedDelaySec=0
+        mode: '0644'
+      notify:
+        - Reload systemd
+        - Restart apt-daily-upgrade timer
+
+    - name: Set hostname
+      hostname:
+        name: "{{ hostname }}"
+
+    - name: Update /etc/hosts with hostname
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1\t{{ hostname }}"
+        state: present
+
+    - name: Create ser2net configuration
+      copy:
+        dest: /etc/ser2net.yaml
+        content: |
+          connection: &con01
+            accepter: tcp,{{ tcp_port }}
+            connector: serialdev,{{ serial_port }},{{ baudrate }}n81,local
+            options:
+              kickolduser: true
+        mode: '0644'
+      notify:
+        - Restart ser2net
+
+    - name: Enable and start ser2net service
+      systemd:
+        name: ser2net
+        enabled: yes
+        state: started
+
+    - name: Enable apt-daily-upgrade timer
+      systemd:
+        name: apt-daily-upgrade.timer
+        enabled: yes
+        state: started
+
+    - name: Display configuration summary
+      debug:
+        msg:
+          - "======================================"
+          - "  Configuration Summary"
+          - "======================================"
+          - "Hostname:     {{ hostname }}"
+          - "Serial Port:  {{ serial_port }}"
+          - "TCP Port:     {{ tcp_port }}"
+          - "Baud Rate:    {{ baudrate }}"
+          - "======================================"
+          - ""
+          - "Serial bridge is available at: {{ hostname }}.local:{{ tcp_port }}"
+          - "Check service status: systemctl status ser2net.service"
+          - "View logs: journalctl -u ser2net.service -f"
+          - ""
+          - "For Home Assistant, use:"
+          - "  Host: {{ hostname }}.local"
+          - "  Port: {{ tcp_port }}"
+
+  handlers:
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Restart apt-daily-upgrade timer
+      systemd:
+        name: apt-daily-upgrade.timer
+        state: restarted
+
+    - name: Restart ser2net
+      systemd:
+        name: ser2net
+        state: restarted
