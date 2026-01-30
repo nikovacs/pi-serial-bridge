@@ -10,7 +10,7 @@ This project provides an easy way to bridge a serial device (such as a Russound 
 
 ### Method 1: Ansible Playbook (Recommended)
 
-The Ansible playbook provides a more maintainable, idempotent approach suitable for managing multiple devices.
+The Ansible playbook provides a more maintainable, idempotent approach suitable for managing multiple devices. **It includes all the same functionality as the bootstrap script** (installing ser2net, configuring unattended-upgrades, etc.) but in a declarative, repeatable format.
 
 #### Prerequisites
 - Ansible installed on your control machine (or run `./setup-ansible.sh` to install)
@@ -44,10 +44,11 @@ The Ansible playbook provides a more maintainable, idempotent approach suitable 
    ```
 
 #### Ansible Features
-- Idempotent: safe to run multiple times
-- Configuration as code: easily version control your settings
-- Multi-host deployment: configure multiple devices simultaneously
-- Better error handling and rollback capabilities
+- **Complete Replacement**: Includes all bootstrap.sh functionality (ser2net, unattended-upgrades, etc.)
+- **Idempotent**: Safe to run multiple times without causing issues
+- **Configuration as Code**: Easily version control your settings
+- **Multi-host Deployment**: Configure multiple devices simultaneously
+- **Better Error Handling**: Built-in rollback capabilities
 
 ### Method 2: Bash Script (Quick One-Time Setup)
 
@@ -162,4 +163,22 @@ If you prefer to review the bash script before running it:
 - **ansible.cfg**: Ansible configuration
 - **setup-ansible.sh**: Helper script to install Ansible
 - **bootstrap.sh**: Standalone bash script for quick setup
+- **COMPARISON.md**: Detailed comparison between Ansible and bash approaches
 - **README.md**: This file
+
+## FAQ
+
+### Does the Ansible playbook replace the bootstrap script?
+
+**Yes!** The Ansible playbook includes all the functionality from the bootstrap script:
+
+- ✅ Installs ser2net
+- ✅ Installs and configures unattended-upgrades  
+- ✅ Sets up automatic security updates (Mondays at 4:30am)
+- ✅ Configures hostname
+- ✅ Creates ser2net configuration
+- ✅ Manages all systemd services
+
+The playbook is the **recommended** method for production use. The bootstrap script remains available for users who need a quick, one-time setup without installing Ansible.
+
+See [COMPARISON.md](COMPARISON.md) for a detailed side-by-side comparison.
