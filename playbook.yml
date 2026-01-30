@@ -11,6 +11,23 @@
     auto_update_reboot_time: "04:30"
 
   tasks:
+    - name: Check if serial port exists
+      stat:
+        path: "{{ serial_port }}"
+      register: serial_check
+
+    - name: Fail if serial port does not exist
+      fail:
+        msg: |
+          Serial port '{{ serial_port }}' does not exist!
+          
+          To find available serial ports, run:
+            ls /dev/ttyUSB* /dev/ttyACM* /dev/ttyAMA* /dev/serial* 2>/dev/null
+          
+          Then re-run with the correct port:
+            curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash -s -- --serial /dev/ttyXXX
+      when: not serial_check.stat.exists
+
     - name: Update apt cache
       apt:
         update_cache: yes
