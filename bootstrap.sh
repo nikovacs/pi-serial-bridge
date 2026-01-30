@@ -1,139 +1,170 @@
 #!/bin/bash
-# bootstrap.sh - Minimal wrapper to run Ansible playbook for Pi Serial Bridge
-# This script can be downloaded and run with:
-# curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash
-#
-# This is a thin wrapper that:
-# 1. Installs Ansible if needed
-# 2. Downloads the playbook and configuration files
-# 3. Runs the playbook in local mode
+# bootstrap.sh - One-command setup for Pi Serial Bridge
 # 
-# All configuration logic lives in playbook.yml (single source of truth)
+# Usage:
+#   curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash
+#
+# Or with custom options:
+#   curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash -s -- \
+#       --hostname mybridge --port 5000 --serial /dev/ttyAMA0 --baud 9600
+#
+# Supports: Raspberry Pi OS, Debian, Ubuntu
+#
+# Defaults are defined in playbook.yml (single source of truth)
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# Configuration
 GITHUB_REPO="https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main"
 WORK_DIR="/tmp/pi-serial-bridge-$$"
 
-# Default values
-DEFAULT_HOSTNAME="russound-bridge"
-DEFAULT_SERIAL_PORT="/dev/ttyUSB0"
-DEFAULT_TCP_PORT="4999"
-DEFAULT_BAUDRATE="19200"
+# User overrides (empty = use playbook defaults)
+OPT_HOSTNAME=""
+OPT_SERIAL=""
+OPT_PORT=""
+OPT_BAUD=""
+INTERACTIVE=true
 
-# Functions
-print_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info()    { echo -e "${GREEN}[INFO]${NC} $1"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+cleanup() { rm -rf "$WORK_DIR" 2>/dev/null || true; }
+
+trap cleanup EXIT
+
+usage() {
+    cat <<EOF
+Usage: $0 [OPTIONS]
+
+Options:
+    -h, --hostname NAME     Set hostname (default: russound-bridge)
+    -p, --port PORT         Set TCP port (default: 4999)
+    -s, --serial DEVICE     Set serial port (default: /dev/ttyUSB0)
+    -b, --baud RATE         Set baud rate (default: 19200)
+    -y, --yes               Non-interactive mode (use defaults or provided values)
+    --help                  Show this help message
+
+Examples:
+    # Interactive mode (prompts for values)
+    curl -sSL $GITHUB_REPO/bootstrap.sh | sudo bash
+
+    # Non-interactive with playbook defaults
+    curl -sSL $GITHUB_REPO/bootstrap.sh | sudo bash -s -- -y
+
+    # Custom configuration
+    curl -sSL $GITHUB_REPO/bootstrap.sh | sudo bash -s -- \\
+        --hostname mybridge --port 5000 --serial /dev/ttyAMA0
+EOF
+    exit 0
 }
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--hostname) OPT_HOSTNAME="$2"; shift 2 ;;
+        -p|--port)     OPT_PORT="$2"; shift 2 ;;
+        -s|--serial)   OPT_SERIAL="$2"; shift 2 ;;
+        -b|--baud)     OPT_BAUD="$2"; shift 2 ;;
+        -y|--yes)      INTERACTIVE=false; shift ;;
+        --help)        usage ;;
+        *)             error "Unknown option: $1. Use --help for usage." ;;
+    esac
+done
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+[[ $EUID -ne 0 ]] && error "This script must be run as root (use sudo)"
 
-# Check if running as root
-if [[ $EUID -ne 0 ]]; then
-   print_error "This script must be run as root (use sudo)"
-   exit 1
-fi
-
-print_info "Pi Serial Bridge Bootstrap (Ansible wrapper)"
 echo ""
+info "Pi Serial Bridge Setup"
+echo "========================================"
 
-# Install Ansible if not present
-if ! command -v ansible-playbook &> /dev/null; then
-    print_info "Ansible not found. Installing Ansible..."
+# Install Ansible if needed
+install_ansible() {
+    if command -v ansible-playbook &>/dev/null; then
+        info "Ansible already installed"
+        return 0
+    fi
+
+    info "Installing Ansible..."
     
-    # Detect OS and install Ansible
-    if command -v apt-get &> /dev/null; then
-        # Debian/Ubuntu/Raspberry Pi OS
+    if command -v apt-get &>/dev/null; then
         apt-get update -qq
         apt-get install -y ansible
-    elif command -v dnf &> /dev/null; then
-        # Fedora
+    elif command -v dnf &>/dev/null; then
         dnf install -y ansible
-    elif command -v yum &> /dev/null; then
-        # CentOS/RHEL
+    elif command -v yum &>/dev/null; then
         yum install -y ansible
     else
-        print_error "Could not detect package manager. Please install Ansible manually."
-        exit 1
+        error "Unsupported package manager. Install Ansible manually."
     fi
     
-    print_info "Ansible installed successfully!"
-else
-    print_info "Ansible is already installed ($(ansible --version | head -1))"
-fi
+    info "Ansible installed"
+}
 
-# Create temporary work directory
-print_info "Setting up temporary workspace..."
+# Prompt for configuration if interactive
+prompt_config() {
+    [[ "$INTERACTIVE" == "false" ]] && return 0
+    [[ ! -t 0 ]] && { info "Non-interactive input detected, using defaults"; return 0; }
+    
+    echo ""
+    echo "Configuration (press Enter for defaults from playbook.yml):"
+    echo ""
+    
+    read -p "Hostname [russound-bridge]: " input
+    [[ -n "$input" ]] && OPT_HOSTNAME="$input"
+    
+    read -p "Serial port [/dev/ttyUSB0]: " input
+    [[ -n "$input" ]] && OPT_SERIAL="$input"
+    
+    read -p "TCP port [4999]: " input
+    [[ -n "$input" ]] && OPT_PORT="$input"
+    
+    read -p "Baud rate [19200]: " input
+    [[ -n "$input" ]] && OPT_BAUD="$input"
+}
+
+# Build extra-vars string (only for user-specified values)
+build_extra_vars() {
+    local vars=""
+    [[ -n "$OPT_HOSTNAME" ]] && vars+="hostname=$OPT_HOSTNAME "
+    [[ -n "$OPT_SERIAL" ]] && vars+="serial_port=$OPT_SERIAL "
+    [[ -n "$OPT_PORT" ]] && vars+="tcp_port=$OPT_PORT "
+    [[ -n "$OPT_BAUD" ]] && vars+="baudrate=$OPT_BAUD "
+    echo "$vars"
+}
+
+# Main execution
+install_ansible
+
+info "Downloading playbook..."
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
-# Download playbook files
-print_info "Downloading playbook files..."
-curl -sSL "$GITHUB_REPO/playbook.yml" -o playbook.yml
-curl -sSL "$GITHUB_REPO/vars.yml" -o vars.yml
+curl -sSL "$GITHUB_REPO/playbook.yml" -o playbook.yml || error "Failed to download playbook"
 
-# Create local inventory
-cat > inventory.ini <<EOF
-[local]
-localhost ansible_connection=local
-EOF
+prompt_config
 
-# Prompt for configuration (or accept defaults)
-echo ""
-echo "Configuration (press Enter to accept defaults):"
-echo ""
-
-read -p "Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
-HOSTNAME=${HOSTNAME:-$DEFAULT_HOSTNAME}
-
-read -p "Serial port [${DEFAULT_SERIAL_PORT}]: " SERIAL_PORT
-SERIAL_PORT=${SERIAL_PORT:-$DEFAULT_SERIAL_PORT}
-
-read -p "TCP port [${DEFAULT_TCP_PORT}]: " TCP_PORT
-TCP_PORT=${TCP_PORT:-$DEFAULT_TCP_PORT}
-
-read -p "Baud rate [${DEFAULT_BAUDRATE}]: " BAUDRATE
-BAUDRATE=${BAUDRATE:-$DEFAULT_BAUDRATE}
-
-# Create custom vars file with user's configuration
-cat > custom_vars.yml <<EOF
----
-hostname: "${HOSTNAME}"
-serial_port: "${SERIAL_PORT}"
-tcp_port: ${TCP_PORT}
-baudrate: ${BAUDRATE}
-auto_update_schedule: "Mon *-*-* 04:30:00"
-auto_update_reboot_time: "04:30"
-EOF
+EXTRA_VARS=$(build_extra_vars)
 
 echo ""
-print_info "Running Ansible playbook with your configuration..."
+if [[ -n "$EXTRA_VARS" ]]; then
+    info "Running playbook with overrides: $EXTRA_VARS"
+else
+    info "Running playbook with defaults"
+fi
 echo ""
 
-# Run the playbook
+# Run playbook locally
 ansible-playbook \
-    -i inventory.ini \
-    -e @custom_vars.yml \
+    --inventory "localhost," \
+    --connection local \
+    ${EXTRA_VARS:+-e "$EXTRA_VARS"} \
     playbook.yml
 
-# Cleanup
-cd /
-rm -rf "$WORK_DIR"
-
 echo ""
-print_info "Bootstrap complete!"
-print_info "Your serial bridge is now configured and running."
-echo ""
+info "Setup complete!"
+info "Check status: sudo systemctl status ser2net"
