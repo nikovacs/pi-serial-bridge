@@ -62,6 +62,15 @@ fi
 print_info "Installing pyserial..."
 pip3 install --upgrade pyserial
 
+# Download the tcp_serial_redirect script
+print_info "Downloading tcp_serial_redirect.py script..."
+SCRIPT_URL="https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/tcp_serial_redirect.py"
+SCRIPT_PATH="/usr/local/bin/tcp_serial_redirect.py"
+
+curl -sSL "$SCRIPT_URL" -o "$SCRIPT_PATH"
+chmod +x "$SCRIPT_PATH"
+print_info "Script downloaded to $SCRIPT_PATH"
+
 # Set hostname
 read -p "Enter hostname for this device [${DEFAULT_HOSTNAME}]: " HOSTNAME
 HOSTNAME=${HOSTNAME:-$DEFAULT_HOSTNAME}
@@ -103,7 +112,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/python3 -m serial.tools.tcp_serial_redirect -P ${TCP_PORT} ${SERIAL_PORT} ${BAUDRATE}
+ExecStart=/usr/bin/python3 /usr/local/bin/tcp_serial_redirect.py ${SERIAL_PORT} ${BAUDRATE} -p ${TCP_PORT}
 Restart=always
 RestartSec=10
 
