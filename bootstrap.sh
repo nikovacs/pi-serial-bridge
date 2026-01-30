@@ -54,12 +54,11 @@ if [ "$(hostname)" != "$HOSTNAME" ]; then
     print_info "Setting hostname to: $HOSTNAME"
     hostnamectl set-hostname "$HOSTNAME"
     
-    # Update /etc/hosts
-    if ! grep -q "127.0.1.1.*$HOSTNAME" /etc/hosts; then
-        sed -i "s/127.0.1.1.*/127.0.1.1\t$HOSTNAME/g" /etc/hosts
-        if ! grep -q "127.0.1.1" /etc/hosts; then
-            echo "127.0.1.1	$HOSTNAME" >> /etc/hosts
-        fi
+    # Update /etc/hosts - replace or add 127.0.1.1 entry
+    if grep -q "^127.0.1.1" /etc/hosts; then
+        sed -i "s/^127.0.1.1.*/127.0.1.1\t$HOSTNAME/g" /etc/hosts
+    else
+        echo "127.0.1.1	$HOSTNAME" >> /etc/hosts
     fi
     print_info "Hostname set to: $HOSTNAME"
 else
@@ -67,14 +66,46 @@ else
 fi
 
 # Prompt for serial configuration
-read -p "Enter serial port [${DEFAULT_SERIAL_PORT}]: " SERIAL_PORT
-SERIAL_PORT=${SERIAL_PORT:-$DEFAULT_SERIAL_PORT}
+while true; do
+    read -p "Enter serial port [${DEFAULT_SERIAL_PORT}]: " SERIAL_PORT
+    SERIAL_PORT=${SERIAL_PORT:-$DEFAULT_SERIAL_PORT}
+    
+    # Check if serial port exists
+    if [ -e "$SERIAL_PORT" ]; then
+        break
+    else
+        print_warning "Serial port $SERIAL_PORT does not currently exist."
+        read -p "Continue anyway? (y/n): " CONTINUE
+        if [[ "$CONTINUE" =~ ^[Yy]$ ]]; then
+            break
+        fi
+    fi
+done
 
-read -p "Enter TCP port [${DEFAULT_TCP_PORT}]: " TCP_PORT
-TCP_PORT=${TCP_PORT:-$DEFAULT_TCP_PORT}
+while true; do
+    read -p "Enter TCP port [${DEFAULT_TCP_PORT}]: " TCP_PORT
+    TCP_PORT=${TCP_PORT:-$DEFAULT_TCP_PORT}
+    
+    # Validate TCP port
+    if [[ "$TCP_PORT" =~ ^[0-9]+$ ]] && [ "$TCP_PORT" -ge 1 ] && [ "$TCP_PORT" -le 65535 ]; then
+        break
+    else
+        print_error "Invalid TCP port. Must be a number between 1 and 65535."
+    fi
+done
 
-read -p "Enter baud rate [${DEFAULT_BAUDRATE}]: " BAUDRATE
-BAUDRATE=${BAUDRATE:-$DEFAULT_BAUDRATE}
+while true; do
+    read -p "Enter baud rate [${DEFAULT_BAUDRATE}]: " BAUDRATE
+    BAUDRATE=${BAUDRATE:-$DEFAULT_BAUDRATE}
+    
+    # Validate baud rate (must be a positive integer)
+    if [[ "$BAUDRATE" =~ ^[0-9]+$ ]] && [ "$BAUDRATE" -gt 0 ]; then
+        # Common baud rates, but we'll accept any positive integer
+        break
+    else
+        print_error "Invalid baud rate. Must be a positive number."
+    fi
+done
 
 # Create ser2net configuration file
 print_info "Creating ser2net configuration..."
