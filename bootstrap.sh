@@ -1,7 +1,14 @@
 #!/bin/bash
-# bootstrap.sh - Setup script for Raspberry Pi Serial TCP Bridge
+# bootstrap.sh - Minimal wrapper to run Ansible playbook for Pi Serial Bridge
 # This script can be downloaded and run with:
 # curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash
+#
+# This is a thin wrapper that:
+# 1. Installs Ansible if needed
+# 2. Downloads the playbook and configuration files
+# 3. Runs the playbook in local mode
+# 
+# All configuration logic lives in playbook.yml (single source of truth)
 
 set -e
 
@@ -11,13 +18,17 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Default configuration
+# Configuration
+GITHUB_REPO="https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main"
+WORK_DIR="/tmp/pi-serial-bridge-$$"
+
+# Default values
 DEFAULT_HOSTNAME="russound-bridge"
 DEFAULT_SERIAL_PORT="/dev/ttyUSB0"
 DEFAULT_TCP_PORT="4999"
 DEFAULT_BAUDRATE="19200"
 
-# Function to print colored messages
+# Functions
 print_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
@@ -36,175 +47,93 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-print_info "Starting Pi Serial Bridge bootstrap..."
+print_info "Pi Serial Bridge Bootstrap (Ansible wrapper)"
+echo ""
 
-# Update package lists
-print_info "Updating package lists..."
-apt-get update -qq
+# Install Ansible if not present
+if ! command -v ansible-playbook &> /dev/null; then
+    print_info "Ansible not found. Installing Ansible..."
+    
+    # Detect OS and install Ansible
+    if command -v apt-get &> /dev/null; then
+        # Debian/Ubuntu/Raspberry Pi OS
+        apt-get update -qq
+        apt-get install -y ansible
+    elif command -v dnf &> /dev/null; then
+        # Fedora
+        dnf install -y ansible
+    elif command -v yum &> /dev/null; then
+        # CentOS/RHEL
+        yum install -y ansible
+    else
+        print_error "Could not detect package manager. Please install Ansible manually."
+        exit 1
+    fi
+    
+    print_info "Ansible installed successfully!"
+else
+    print_info "Ansible is already installed ($(ansible --version | head -1))"
+fi
 
-# Install ser2net (standard serial-to-network tool)
-print_info "Installing ser2net..."
-apt-get install -y ser2net
+# Create temporary work directory
+print_info "Setting up temporary workspace..."
+mkdir -p "$WORK_DIR"
+cd "$WORK_DIR"
 
-# Configure automatic updates
-print_info "Configuring automatic updates..."
+# Download playbook files
+print_info "Downloading playbook files..."
+curl -sSL "$GITHUB_REPO/playbook.yml" -o playbook.yml
+curl -sSL "$GITHUB_REPO/vars.yml" -o vars.yml
 
-# Install unattended-upgrades package for automatic updates
-apt-get install -y unattended-upgrades
-
-# Configure unattended-upgrades for Debian/Ubuntu/Pi OS variants
-cat > /etc/apt/apt.conf.d/50unattended-upgrades <<'EOF'
-// Automatically upgrade packages from these origins
-Unattended-Upgrade::Origins-Pattern {
-    // Debian
-    "origin=Debian,codename=${distro_codename},label=Debian-Security";
-    "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
-    // Ubuntu
-    "origin=Ubuntu,archive=${distro_codename}-security,label=Ubuntu";
-    // Raspberry Pi OS
-    "origin=Raspbian,codename=${distro_codename},label=Raspbian";
-};
-
-// Remove unused automatically installed kernel-related packages
-Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
-
-// Remove unused dependencies after automatic upgrade
-Unattended-Upgrade::Remove-Unused-Dependencies "true";
-
-// Automatically reboot if required
-Unattended-Upgrade::Automatic-Reboot "true";
-Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+# Create local inventory
+cat > inventory.ini <<EOF
+[local]
+localhost ansible_connection=local
 EOF
 
-# Enable automatic updates with systemd timer
-cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
-APT::Periodic::Update-Package-Lists "1";
-APT::Periodic::Unattended-Upgrade "1";
-APT::Periodic::AutocleanInterval "7";
-EOF
+# Prompt for configuration (or accept defaults)
+echo ""
+echo "Configuration (press Enter to accept defaults):"
+echo ""
 
-# Configure systemd timer to run updates on Monday at 4:30am
-print_info "Setting up automatic update schedule (Monday 4:30am)..."
-
-# Create systemd timer override directory
-mkdir -p /etc/systemd/system/apt-daily-upgrade.timer.d/
-
-# Create timer override configuration
-cat > /etc/systemd/system/apt-daily-upgrade.timer.d/override.conf <<'EOF'
-[Timer]
-OnCalendar=
-OnCalendar=Mon *-*-* 04:30:00
-RandomizedDelaySec=0
-EOF
-
-# Reload systemd and enable timers
-systemctl daemon-reload
-systemctl enable apt-daily-upgrade.timer
-systemctl restart apt-daily-upgrade.timer
-
-print_info "Automatic updates configured to run Mondays at 4:30am"
-
-# Set hostname
-read -p "Enter hostname for this device [${DEFAULT_HOSTNAME}]: " HOSTNAME
+read -p "Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
 HOSTNAME=${HOSTNAME:-$DEFAULT_HOSTNAME}
 
-if [ "$(hostname)" != "$HOSTNAME" ]; then
-    print_info "Setting hostname to: $HOSTNAME"
-    hostnamectl set-hostname "$HOSTNAME"
-    
-    # Update /etc/hosts - replace or add 127.0.1.1 entry
-    if grep -q "^127.0.1.1" /etc/hosts; then
-        sed -i "s/^127.0.1.1.*/127.0.1.1\t$HOSTNAME/g" /etc/hosts
-    else
-        echo "127.0.1.1	$HOSTNAME" >> /etc/hosts
-    fi
-    print_info "Hostname set to: $HOSTNAME"
-else
-    print_info "Hostname is already set to: $HOSTNAME"
-fi
+read -p "Serial port [${DEFAULT_SERIAL_PORT}]: " SERIAL_PORT
+SERIAL_PORT=${SERIAL_PORT:-$DEFAULT_SERIAL_PORT}
 
-# Prompt for serial configuration
-while true; do
-    read -p "Enter serial port [${DEFAULT_SERIAL_PORT}]: " SERIAL_PORT
-    SERIAL_PORT=${SERIAL_PORT:-$DEFAULT_SERIAL_PORT}
-    
-    # Check if serial port exists
-    if [ -e "$SERIAL_PORT" ]; then
-        break
-    else
-        print_warning "Serial port $SERIAL_PORT does not currently exist."
-        read -p "Continue anyway? (y/n): " CONTINUE
-        if [[ "$CONTINUE" =~ ^[Yy]$ ]]; then
-            break
-        fi
-    fi
-done
+read -p "TCP port [${DEFAULT_TCP_PORT}]: " TCP_PORT
+TCP_PORT=${TCP_PORT:-$DEFAULT_TCP_PORT}
 
-while true; do
-    read -p "Enter TCP port [${DEFAULT_TCP_PORT}]: " TCP_PORT
-    TCP_PORT=${TCP_PORT:-$DEFAULT_TCP_PORT}
-    
-    # Validate TCP port
-    if [[ "$TCP_PORT" =~ ^[0-9]+$ ]] && [ "$TCP_PORT" -ge 1 ] && [ "$TCP_PORT" -le 65535 ]; then
-        break
-    else
-        print_error "Invalid TCP port. Must be a number between 1 and 65535."
-    fi
-done
+read -p "Baud rate [${DEFAULT_BAUDRATE}]: " BAUDRATE
+BAUDRATE=${BAUDRATE:-$DEFAULT_BAUDRATE}
 
-while true; do
-    read -p "Enter baud rate [${DEFAULT_BAUDRATE}]: " BAUDRATE
-    BAUDRATE=${BAUDRATE:-$DEFAULT_BAUDRATE}
-    
-    # Validate baud rate (must be a positive integer)
-    if [[ "$BAUDRATE" =~ ^[0-9]+$ ]] && [ "$BAUDRATE" -gt 0 ]; then
-        # Common baud rates, but we'll accept any positive integer
-        break
-    else
-        print_error "Invalid baud rate. Must be a positive number."
-    fi
-done
-
-# Create ser2net configuration file
-print_info "Creating ser2net configuration..."
-
-cat > /etc/ser2net.yaml <<EOF
-connection: &con01
-  accepter: tcp,${TCP_PORT}
-  connector: serialdev,${SERIAL_PORT},${BAUDRATE}n81,local
-  options:
-    kickolduser: true
+# Create custom vars file with user's configuration
+cat > custom_vars.yml <<EOF
+---
+hostname: "${HOSTNAME}"
+serial_port: "${SERIAL_PORT}"
+tcp_port: ${TCP_PORT}
+baudrate: ${BAUDRATE}
+auto_update_schedule: "Mon *-*-* 04:30:00"
+auto_update_reboot_time: "04:30"
 EOF
 
-# Reload systemd and enable the service
-print_info "Enabling and starting ser2net service..."
-systemctl daemon-reload
-systemctl enable ser2net.service
-systemctl restart ser2net.service
+echo ""
+print_info "Running Ansible playbook with your configuration..."
+echo ""
 
-# Check service status
-sleep 2
-if systemctl is-active --quiet ser2net.service; then
-    print_info "Serial TCP Bridge service is running successfully!"
-else
-    print_warning "Service may not be running. Check status with: systemctl status ser2net.service"
-fi
+# Run the playbook
+ansible-playbook \
+    -i inventory.ini \
+    -e @custom_vars.yml \
+    playbook.yml
 
-# Display configuration summary
+# Cleanup
+cd /
+rm -rf "$WORK_DIR"
+
 echo ""
-echo "======================================"
-echo "  Configuration Summary"
-echo "======================================"
-echo "Hostname:     $HOSTNAME"
-echo "Serial Port:  $SERIAL_PORT"
-echo "TCP Port:     $TCP_PORT"
-echo "Baud Rate:    $BAUDRATE"
-echo "======================================"
+print_info "Bootstrap complete!"
+print_info "Your serial bridge is now configured and running."
 echo ""
-print_info "Setup complete! The serial bridge is now available at: ${HOSTNAME}.local:${TCP_PORT}"
-print_info "You can check the service status with: systemctl status ser2net.service"
-print_info "View logs with: journalctl -u ser2net.service -f"
-echo ""
-print_info "For Home Assistant, use:"
-echo "  Host: ${HOSTNAME}.local"
-echo "  Port: ${TCP_PORT}"

@@ -1,18 +1,18 @@
 # pi-serial-bridge
 
-A simple setup tool to quickly configure a serial-to-TCP bridge on an SBC (Single Board Computer) like Raspberry Pi. Available as both an Ansible playbook (recommended) and a bash script.
+A simple setup tool to quickly configure a serial-to-TCP bridge on an SBC (Single Board Computer) like Raspberry Pi.
 
 ## Purpose
 
 This project provides an easy way to bridge a serial device (such as a Russound sound system) to TCP/IP for use with Home Assistant or other network-based automation systems. It uses the standard `ser2net` tool for reliable serial-to-TCP bridging.
 
+**Single Source of Truth**: All configuration logic lives in the Ansible playbook (`playbook.yml`). The bootstrap script is just a thin wrapper that installs Ansible and runs the playbook.
+
 ## Installation Methods
 
-> **💡 Quick Answer:** Both methods do the same thing! The Ansible playbook includes all functionality from the bootstrap script (ser2net, unattended-upgrades, etc.). See [DIAGRAM.md](DIAGRAM.md) for a visual comparison.
+### Method 1: Ansible Playbook (Direct)
 
-### Method 1: Ansible Playbook (Recommended)
-
-The Ansible playbook provides a more maintainable, idempotent approach suitable for managing multiple devices. **It includes all the same functionality as the bootstrap script** (installing ser2net, configuring unattended-upgrades, etc.) but in a declarative, repeatable format.
+Run the Ansible playbook directly for full control and multi-host deployment.
 
 #### Prerequisites
 - Ansible installed on your control machine (or run `./setup-ansible.sh` to install)
@@ -46,36 +46,34 @@ The Ansible playbook provides a more maintainable, idempotent approach suitable 
    ```
 
 #### Ansible Features
-- **Complete Replacement**: Includes all bootstrap.sh functionality (ser2net, unattended-upgrades, etc.)
+- **Single Source of Truth**: All configuration logic in one place (playbook.yml)
 - **Idempotent**: Safe to run multiple times without causing issues
 - **Configuration as Code**: Easily version control your settings
 - **Multi-host Deployment**: Configure multiple devices simultaneously
 - **Better Error Handling**: Built-in rollback capabilities
 
-### Method 2: Bash Script (Quick One-Time Setup)
+### Method 2: Bootstrap Script (Quick Setup)
 
-For a quick, one-time setup on a single device:
+For a quick setup with a single curl command:
 
 
-Run the following command on your Raspberry Pi to automatically set up the serial-TCP bridge:
+Run this command on your Raspberry Pi:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash
 ```
 
-The script will:
-- Install required system packages (ser2net, unattended-upgrades)
-- Configure automatic OS updates (Mondays at 4:30am)
-- Set up the hostname for easy network discovery
-- Configure ser2net for serial-to-TCP bridging
-- Set up and start a systemd service
-- Provide interactive prompts for configuration
+**What it does:**
+1. Installs Ansible if not present
+2. Downloads the playbook and configuration files
+3. Prompts for your configuration (hostname, ports, etc.)
+4. Runs the Ansible playbook in local mode
 
-**Note:** The bash script is provided for quick, one-time setups. For production use or managing multiple devices, the Ansible playbook is recommended.
+**Note:** The bootstrap script is a thin wrapper around the Ansible playbook. All configuration logic lives in `playbook.yml` to avoid duplication.
 
 ## What Gets Configured
 
-Both installation methods configure:
+The Ansible playbook configures:
 - **Hostname**: Default is `russound-bridge` (accessible as `russound-bridge.local`)
 - **Serial Port**: Default is `/dev/ttyUSB0`
 - **TCP Port**: Default is `4999`
@@ -159,28 +157,23 @@ If you prefer to review the bash script before running it:
 
 ## Files in This Repository
 
-- **playbook.yml**: Main Ansible playbook for configuration
-- **vars.yml**: Configuration variables for the playbook
+- **playbook.yml**: Main Ansible playbook - single source of truth for all configuration
+- **vars.yml**: Default configuration variables
 - **inventory.ini**: Ansible inventory file (edit to add your hosts)
 - **ansible.cfg**: Ansible configuration
-- **setup-ansible.sh**: Helper script to install Ansible
-- **bootstrap.sh**: Standalone bash script for quick setup
-- **COMPARISON.md**: Detailed comparison between Ansible and bash approaches
+- **setup-ansible.sh**: Helper script to install Ansible on control machine
+- **bootstrap.sh**: Thin wrapper script that installs Ansible and runs the playbook
 - **README.md**: This file
 
-## FAQ
+## Architecture
 
-### Does the Ansible playbook replace the bootstrap script?
+This project follows a **single source of truth** principle:
 
-**Yes!** The Ansible playbook includes all the functionality from the bootstrap script:
+- **playbook.yml** contains ALL configuration logic (installing packages, configuring services, etc.)
+- **bootstrap.sh** is a minimal wrapper (~139 lines) that:
+  1. Installs Ansible if needed
+  2. Downloads playbook files
+  3. Prompts for configuration
+  4. Runs ansible-playbook
 
-- ✅ Installs ser2net
-- ✅ Installs and configures unattended-upgrades  
-- ✅ Sets up automatic security updates (Mondays at 4:30am)
-- ✅ Configures hostname
-- ✅ Creates ser2net configuration
-- ✅ Manages all systemd services
-
-The playbook is the **recommended** method for production use. The bootstrap script remains available for users who need a quick, one-time setup without installing Ansible.
-
-See [COMPARISON.md](COMPARISON.md) for a detailed side-by-side comparison.
+This eliminates code duplication and ensures there's only one place to maintain configuration logic.
