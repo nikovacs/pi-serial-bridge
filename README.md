@@ -15,7 +15,8 @@ curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/boots
 ```
 
 The script will:
-- Install required system packages (ser2net)
+- Install required system packages (ser2net, unattended-upgrades)
+- Configure automatic OS updates (Mondays at 4:30am)
 - Set up the hostname for easy network discovery
 - Configure ser2net for serial-to-TCP bridging
 - Set up and start a systemd service
@@ -56,6 +57,32 @@ Edit configuration:
 ```bash
 sudo nano /etc/ser2net.yaml
 sudo systemctl restart ser2net.service
+```
+
+## Automatic Updates
+
+The bootstrap script configures automatic security updates for Debian, Ubuntu, and Raspberry Pi OS variants:
+
+- **Schedule**: Updates run automatically every Monday at 4:30am
+- **Scope**: Security updates and critical patches
+- **Reboot**: System will automatically reboot if required (at 4:30am)
+- **Cleanup**: Unused packages and old kernels are automatically removed
+
+To check automatic update status:
+```bash
+sudo systemctl status apt-daily-upgrade.timer
+```
+
+To manually trigger an update:
+```bash
+sudo unattended-upgrade -d
+```
+
+To modify the update schedule, edit:
+```bash
+sudo nano /etc/systemd/system/apt-daily-upgrade.timer.d/override.conf
+sudo systemctl daemon-reload
+sudo systemctl restart apt-daily-upgrade.timer
 ```
 
 ## Manual Installation

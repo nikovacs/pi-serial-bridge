@@ -1,7 +1,7 @@
 #!/bin/bash
 # bootstrap.sh - Setup script for Raspberry Pi Serial TCP Bridge
 # This script can be downloaded and run with:
-# curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | bash
+# curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash
 
 set -e
 
@@ -45,6 +45,64 @@ apt-get update -qq
 # Install ser2net (standard serial-to-network tool)
 print_info "Installing ser2net..."
 apt-get install -y ser2net
+
+# Configure automatic updates
+print_info "Configuring automatic updates..."
+
+# Install unattended-upgrades package for automatic updates
+apt-get install -y unattended-upgrades
+
+# Configure unattended-upgrades for Debian/Ubuntu/Pi OS variants
+cat > /etc/apt/apt.conf.d/50unattended-upgrades <<'EOF'
+// Automatically upgrade packages from these origins
+Unattended-Upgrade::Origins-Pattern {
+    // Debian
+    "origin=Debian,codename=${distro_codename},label=Debian-Security";
+    "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+    // Ubuntu
+    "origin=Ubuntu,archive=${distro_codename}-security,label=Ubuntu";
+    // Raspberry Pi OS
+    "origin=Raspbian,codename=${distro_codename},label=Raspbian";
+};
+
+// Remove unused automatically installed kernel-related packages
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+
+// Remove unused dependencies after automatic upgrade
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+// Automatically reboot if required
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+EOF
+
+# Enable automatic updates with systemd timer
+cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+EOF
+
+# Configure systemd timer to run updates on Monday at 4:30am
+print_info "Setting up automatic update schedule (Monday 4:30am)..."
+
+# Create systemd timer override directory
+mkdir -p /etc/systemd/system/apt-daily-upgrade.timer.d/
+
+# Create timer override configuration
+cat > /etc/systemd/system/apt-daily-upgrade.timer.d/override.conf <<'EOF'
+[Timer]
+OnCalendar=
+OnCalendar=Mon *-*-* 04:30:00
+RandomizedDelaySec=0
+EOF
+
+# Reload systemd and enable timers
+systemctl daemon-reload
+systemctl enable apt-daily-upgrade.timer
+systemctl restart apt-daily-upgrade.timer
+
+print_info "Automatic updates configured to run Mondays at 4:30am"
 
 # Set hostname
 read -p "Enter hostname for this device [${DEFAULT_HOSTNAME}]: " HOSTNAME
