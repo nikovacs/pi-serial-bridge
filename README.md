@@ -8,6 +8,8 @@ This project provides an easy way to bridge a serial device (such as a Russound 
 
 ## Installation Methods
 
+> **💡 Quick Answer:** Both methods do the same thing! The Ansible playbook includes all functionality from the bootstrap script (ser2net, unattended-upgrades, etc.). See [DIAGRAM.md](DIAGRAM.md) for a visual comparison.
+
 ### Method 1: Ansible Playbook (Recommended)
 
 The Ansible playbook provides a more maintainable, idempotent approach suitable for managing multiple devices. **It includes all the same functionality as the bootstrap script** (installing ser2net, configuring unattended-upgrades, etc.) but in a declarative, repeatable format.
