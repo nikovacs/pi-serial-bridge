@@ -1,14 +1,60 @@
 # pi-serial-bridge
 
-A simple bootstrap file to quickly setup a serial-tcp bridge on an SBC (Single Board Computer) like Raspberry Pi.
+A simple setup tool to quickly configure a serial-to-TCP bridge on an SBC (Single Board Computer) like Raspberry Pi. Available as both an Ansible playbook (recommended) and a bash script.
 
 ## Purpose
 
 This project provides an easy way to bridge a serial device (such as a Russound sound system) to TCP/IP for use with Home Assistant or other network-based automation systems. It uses the standard `ser2net` tool for reliable serial-to-TCP bridging.
 
-## Quick Start
+## Installation Methods
 
-Run the following command on your Raspberry Pi or similar SBC to automatically set up the serial-TCP bridge:
+### Method 1: Ansible Playbook (Recommended)
+
+The Ansible playbook provides a more maintainable, idempotent approach suitable for managing multiple devices.
+
+#### Prerequisites
+- Ansible installed on your control machine (or run `./setup-ansible.sh` to install)
+- SSH access to your target Raspberry Pi
+
+#### Quick Start
+
+1. Clone or download this repository
+2. Edit `inventory.ini` to specify your target host:
+   ```ini
+   [pi_serial_bridge]
+   192.168.1.100 ansible_user=pi
+   ```
+
+3. (Optional) Customize configuration in `vars.yml`:
+   ```yaml
+   hostname: "russound-bridge"
+   serial_port: "/dev/ttyUSB0"
+   tcp_port: 4999
+   baudrate: 19200
+   ```
+
+4. Run the playbook:
+   ```bash
+   ansible-playbook playbook.yml
+   ```
+
+   Or with custom variables:
+   ```bash
+   ansible-playbook playbook.yml -e @vars.yml
+   ```
+
+#### Ansible Features
+- Idempotent: safe to run multiple times
+- Configuration as code: easily version control your settings
+- Multi-host deployment: configure multiple devices simultaneously
+- Better error handling and rollback capabilities
+
+### Method 2: Bash Script (Quick One-Time Setup)
+
+For a quick, one-time setup on a single device:
+
+
+Run the following command on your Raspberry Pi to automatically set up the serial-TCP bridge:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash
@@ -20,15 +66,19 @@ The script will:
 - Set up the hostname for easy network discovery
 - Configure ser2net for serial-to-TCP bridging
 - Set up and start a systemd service
-- Provide configuration options for serial port, TCP port, and baud rate
+- Provide interactive prompts for configuration
 
-## Configuration
+**Note:** The bash script is provided for quick, one-time setups. For production use or managing multiple devices, the Ansible playbook is recommended.
 
-During installation, you'll be prompted for:
+## What Gets Configured
+
+Both installation methods configure:
 - **Hostname**: Default is `russound-bridge` (accessible as `russound-bridge.local`)
 - **Serial Port**: Default is `/dev/ttyUSB0`
 - **TCP Port**: Default is `4999`
 - **Baud Rate**: Default is `19200` (common for Russound systems)
+- **Automatic Updates**: Security updates run Mondays at 4:30am
+- **Auto-reboot**: System reboots automatically at 4:30am if updates require it
 
 ## Usage with Home Assistant
 
@@ -87,7 +137,7 @@ sudo systemctl restart apt-daily-upgrade.timer
 
 ## Manual Installation
 
-If you prefer to review the script before running it:
+If you prefer to review the bash script before running it:
 
 1. Download the script:
    ```bash
@@ -103,3 +153,13 @@ If you prefer to review the script before running it:
    ```bash
    sudo bash bootstrap.sh
    ```
+
+## Files in This Repository
+
+- **playbook.yml**: Main Ansible playbook for configuration
+- **vars.yml**: Configuration variables for the playbook
+- **inventory.ini**: Ansible inventory file (edit to add your hosts)
+- **ansible.cfg**: Ansible configuration
+- **setup-ansible.sh**: Helper script to install Ansible
+- **bootstrap.sh**: Standalone bash script for quick setup
+- **README.md**: This file
