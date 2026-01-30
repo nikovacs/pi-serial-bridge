@@ -157,12 +157,13 @@ If you prefer to review the bash script before running it:
 
 ## Files in This Repository
 
-- **playbook.yml**: Main Ansible playbook - single source of truth for all configuration
+- **playbook.yml**: **Single source of truth** - ALL configuration logic lives here
+- **bootstrap.sh**: Thin wrapper that installs Ansible and runs the playbook
 - **vars.yml**: Default configuration variables
 - **inventory.ini**: Ansible inventory file (edit to add your hosts)
 - **ansible.cfg**: Ansible configuration
 - **setup-ansible.sh**: Helper script to install Ansible on control machine
-- **bootstrap.sh**: Thin wrapper script that installs Ansible and runs the playbook
+- **ARCHITECTURE.md**: Detailed explanation of the single source of truth architecture
 - **README.md**: This file
 
 ## Architecture
