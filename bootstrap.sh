@@ -4,7 +4,7 @@
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash
 #
-# Or with custom options:
+# With custom options:
 #   curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash -s -- \
 #       --hostname mybridge --port 5000 --serial /dev/ttyAMA0 --baud 9600
 #
@@ -22,7 +22,6 @@ OPT_HOSTNAME=""
 OPT_SERIAL=""
 OPT_PORT=""
 OPT_BAUD=""
-INTERACTIVE=true
 
 # Colors
 RED='\033[0;31m'
@@ -46,15 +45,11 @@ Options:
     -p, --port PORT         Set TCP port (default: 4999)
     -s, --serial DEVICE     Set serial port (default: /dev/ttyUSB0)
     -b, --baud RATE         Set baud rate (default: 19200)
-    -y, --yes               Non-interactive mode (use defaults or provided values)
     --help                  Show this help message
 
 Examples:
-    # Interactive mode (prompts for values)
+    # Use defaults
     curl -sSL $GITHUB_REPO/bootstrap.sh | sudo bash
-
-    # Non-interactive with playbook defaults
-    curl -sSL $GITHUB_REPO/bootstrap.sh | sudo bash -s -- -y
 
     # Custom configuration
     curl -sSL $GITHUB_REPO/bootstrap.sh | sudo bash -s -- \\
@@ -70,7 +65,6 @@ while [[ $# -gt 0 ]]; do
         -p|--port)     OPT_PORT="$2"; shift 2 ;;
         -s|--serial)   OPT_SERIAL="$2"; shift 2 ;;
         -b|--baud)     OPT_BAUD="$2"; shift 2 ;;
-        -y|--yes)      INTERACTIVE=false; shift ;;
         --help)        usage ;;
         *)             error "Unknown option: $1. Use --help for usage." ;;
     esac
@@ -105,36 +99,37 @@ install_ansible() {
     info "Ansible installed"
 }
 
-# Prompt for configuration if interactive
-prompt_config() {
-    [[ "$INTERACTIVE" == "false" ]] && return 0
-    [[ ! -t 0 ]] && { info "Non-interactive input detected, using defaults"; return 0; }
-    
-    echo ""
-    echo "Configuration (press Enter for defaults from playbook.yml):"
-    echo ""
-    
-    read -p "Hostname [russound-bridge]: " input
-    [[ -n "$input" ]] && OPT_HOSTNAME="$input"
-    
-    read -p "Serial port [/dev/ttyUSB0]: " input
-    [[ -n "$input" ]] && OPT_SERIAL="$input"
-    
-    read -p "TCP port [4999]: " input
-    [[ -n "$input" ]] && OPT_PORT="$input"
-    
-    read -p "Baud rate [19200]: " input
-    [[ -n "$input" ]] && OPT_BAUD="$input"
-}
-
 # Build extra-vars string (only for user-specified values)
 build_extra_vars() {
     local vars=""
-    [[ -n "$OPT_HOSTNAME" ]] && vars+="hostname=$OPT_HOSTNAME "
-    [[ -n "$OPT_SERIAL" ]] && vars+="serial_port=$OPT_SERIAL "
-    [[ -n "$OPT_PORT" ]] && vars+="tcp_port=$OPT_PORT "
-    [[ -n "$OPT_BAUD" ]] && vars+="baudrate=$OPT_BAUD "
+    if [[ -n "$OPT_HOSTNAME" ]]; then vars+="hostname=$OPT_HOSTNAME "; fi
+    if [[ -n "$OPT_SERIAL" ]]; then vars+="serial_port=$OPT_SERIAL "; fi
+    if [[ -n "$OPT_PORT" ]]; then vars+="tcp_port=$OPT_PORT "; fi
+    if [[ -n "$OPT_BAUD" ]]; then vars+="baudrate=$OPT_BAUD "; fi
     echo "$vars"
+}
+
+# Prompt for config if no flags provided and terminal available
+prompt_if_interactive() {
+    # Skip if any flags were provided
+    if [[ -n "$OPT_HOSTNAME$OPT_SERIAL$OPT_PORT$OPT_BAUD" ]]; then return 0; fi
+    # Skip if no terminal available
+    if [[ ! -e /dev/tty ]]; then return 0; fi
+    
+    echo ""
+    echo "Configuration (press Enter for defaults):"
+    
+    read -p "  Hostname [russound-bridge]: " input < /dev/tty
+    if [[ -n "$input" ]]; then OPT_HOSTNAME="$input"; fi
+    
+    read -p "  Serial port [/dev/ttyUSB0]: " input < /dev/tty
+    if [[ -n "$input" ]]; then OPT_SERIAL="$input"; fi
+    
+    read -p "  TCP port [4999]: " input < /dev/tty
+    if [[ -n "$input" ]]; then OPT_PORT="$input"; fi
+    
+    read -p "  Baud rate [19200]: " input < /dev/tty
+    if [[ -n "$input" ]]; then OPT_BAUD="$input"; fi
 }
 
 # Main execution
@@ -146,7 +141,7 @@ cd "$WORK_DIR"
 
 curl -sSL "$GITHUB_REPO/playbook.yml" -o playbook.yml || error "Failed to download playbook"
 
-prompt_config
+prompt_if_interactive
 
 EXTRA_VARS=$(build_extra_vars)
 
@@ -159,11 +154,14 @@ fi
 echo ""
 
 # Run playbook locally
-ansible-playbook \
+if ! ansible-playbook \
     --inventory "localhost," \
     --connection local \
     ${EXTRA_VARS:+-e "$EXTRA_VARS"} \
-    playbook.yml
+    playbook.yml; then
+    echo ""
+    error "Playbook failed! See errors above."
+fi
 
 echo ""
 info "Setup complete!"

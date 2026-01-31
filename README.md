@@ -4,24 +4,12 @@ One-command setup for a serial-to-TCP bridge on Raspberry Pi OS, Debian, or Ubun
 
 ## Quick Start
 
+With defaults (hostname: `russound-bridge`, port: `4999`, serial: `/dev/ttyUSB0`):
 ```bash
 curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash
 ```
 
-That's it! The script will:
-1. Install Ansible (if needed)
-2. Prompt for configuration (hostname, ports, etc.)
-3. Install and configure `ser2net` for serial-to-TCP bridging
-4. Set up automatic security updates
-
-## Non-Interactive Mode
-
-Use defaults without prompts:
-```bash
-curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash -s -- -y
-```
-
-Custom configuration:
+With custom configuration:
 ```bash
 curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/bootstrap.sh | sudo bash -s -- \
     --hostname mybridge \
@@ -29,6 +17,11 @@ curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/boots
     --serial /dev/ttyAMA0 \
     --baud 9600
 ```
+
+The script will:
+1. Install Ansible (if needed)
+2. Install and configure `ser2net` for serial-to-TCP bridging
+3. Set up automatic security updates
 
 ### Options
 
@@ -38,7 +31,6 @@ curl -sSL https://raw.githubusercontent.com/nikovacs/pi-serial-bridge/main/boots
 | `-p, --port` | TCP port | `4999` |
 | `-s, --serial` | Serial device | `/dev/ttyUSB0` |
 | `-b, --baud` | Baud rate | `19200` |
-| `-y, --yes` | Non-interactive mode | - |
 
 ## What Gets Configured
 
